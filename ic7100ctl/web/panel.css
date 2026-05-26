@@ -1,0 +1,481 @@
+/* ic7100ctl — IC-7100 control panel styling.
+   Adapted from the Radio Gateway shared theme + the gateway's ic7100.html
+   page styles. Self-contained: defines the --t-* / --s-* / --f-* / --r-*
+   token vocabulary inline so no external CSS is required. */
+
+:root {
+  /* Palette — phosphor/instrument-panel: deep base, hairline borders,
+     one bright accent (cyan) + green/red/amber signal colors. */
+  --t-bg:         #0b1014;
+  --t-panel:      #121820;
+  --t-panel-hi:   #1a2230;
+  --t-border:     #1e2a38;
+  --t-border-hi:  #2c3e52;
+  --t-accent:     #4fd6e6;
+  --t-text:       #d6dee6;
+  --t-text-dim:   #7a8a99;
+  --t-text-mute:  #6b7a8a;
+  --t-ok:         #5dc47a;
+  --t-warn:       #e89d3c;
+  --t-err:        #e04848;
+
+  --t-btn:        #0e131a;
+  --t-btn-border: var(--t-border);
+  --t-btn-hover:  var(--t-panel-hi);
+  --t-btn-active: var(--t-border-hi);
+
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px;  --s-4: 16px;  --s-5: 24px;  --s-6: 32px;
+  --f-xs: 11px; --f-sm: 12px; --f-base: 13px; --f-md: 15px; --f-lg: 18px; --f-xl: 24px;
+  --r-sm: 2px; --r-md: 4px;
+
+  --f-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: var(--f-mono);
+  font-size: var(--f-base);
+  line-height: 1.45;
+  color: var(--t-text);
+  margin: 0;
+  padding: var(--s-3) var(--s-4) var(--s-4);
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -10%, #0d1520 0%, #080b0e 70%, #05080a 100%);
+  background-attachment: fixed;
+  background-color: var(--t-bg);
+  min-height: 100vh;
+}
+
+::selection { background: var(--t-accent); color: var(--t-bg); }
+:focus-visible { outline: 1px solid var(--t-accent); outline-offset: 2px; }
+
+h1 {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 var(--s-3);
+  font-size: var(--f-lg);
+  color: var(--t-text);
+}
+h1 .h1-sub {
+  color: var(--t-text-dim);
+  font-weight: 400;
+  font-size: var(--f-sm);
+  letter-spacing: 0.06em;
+  margin-left: var(--s-2);
+}
+
+a { color: var(--t-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Reusable buttons (subset from common.css) */
+.rb {
+  font: inherit;
+  font-size: var(--f-sm);
+  background: var(--t-btn);
+  border: 1px solid var(--t-btn-border);
+  color: var(--t-text);
+  border-radius: var(--r-md);
+  padding: var(--s-1) var(--s-3);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+.rb:hover { background: var(--t-btn-hover); border-color: var(--t-border-hi); }
+.rb-sm { padding: 3px var(--s-2); font-size: var(--f-xs); }
+
+input, select, textarea, button { font-family: inherit; }
+input[type="range"] { accent-color: var(--t-accent); }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--t-accent); }
+
+/* ── IC-7100 panel ─────────────────────────────────────────────────────── */
+
+.ic-bar {
+  margin-bottom: var(--s-3);
+  background: var(--t-panel);
+  border: 1px solid var(--t-border);
+  border-radius: var(--r-md);
+  padding: var(--s-2) var(--s-3);
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+.ic-bar .sep   { color: var(--t-border); }
+.ic-spacer     { flex: 1; }
+.ic-label      { color: var(--t-text-dim); font-size: var(--f-sm); }
+.ic-val        { color: var(--t-text); font-variant-numeric: tabular-nums; }
+.ic-val.ok     { color: var(--t-ok); }
+.ic-val.warn   { color: var(--t-warn); }
+.ic-val.err    { color: var(--t-err); }
+.ic-val.dim    { color: var(--t-text-dim); }
+
+/* Big freq display — wfview top-center. Each digit is a clickable/scrollable
+   span. Mouse wheel on a digit steps that decade; Up/Down arrows step the
+   active digit; Left/Right move the active position. */
+.ic-freq-display {
+  font-family: var(--f-mono);
+  font-size: 2.6em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--t-accent);
+  font-variant-numeric: tabular-nums;
+  padding: 0 var(--s-3);
+  min-width: 7em;
+  text-align: right;
+  user-select: none;
+  outline: none;
+  display: inline-flex;
+  align-items: baseline;
+}
+.ic-freq-display:focus { outline: 1px dashed var(--t-accent); }
+.ic-fd {
+  display: inline-block;
+  min-width: 0.7em;
+  text-align: center;
+  cursor: ns-resize;
+  padding: 0 0.02em;
+  border-bottom: 2px solid transparent;
+  transition: background 0.1s;
+}
+.ic-fd:hover { background: var(--t-panel-hi); }
+.ic-fd.active {
+  color: var(--t-bg);
+  background: var(--t-accent);
+  border-bottom-color: var(--t-text);
+}
+.ic-fd.leading { color: var(--t-text-dim); }
+.ic-freq-dot { color: var(--t-text-dim); margin: 0 0.05em; }
+.ic-freq-unit { color: var(--t-text-dim); font-size: 0.4em; vertical-align: super; margin-left: 0.4em; }
+
+/* Tune-step button row (wfview-style ±decade) */
+.ic-tune-steps {
+  display: flex; gap: 2px; align-items: center; flex-wrap: wrap;
+  margin-top: var(--s-1);
+}
+.ic-tune-steps button {
+  min-width: 3em;
+  font-family: var(--f-mono);
+  font-size: var(--f-xs);
+}
+
+/* Band + mode button rows */
+.ic-btn-row    { display: flex; gap: var(--s-1); flex-wrap: wrap; }
+.ic-btn-row button.active {
+  background: var(--t-accent); color: var(--t-bg); border-color: var(--t-accent);
+}
+/* Memory destructive buttons (Write / Clear) */
+.ic-mem-danger { border-color: var(--t-err); color: var(--t-err); }
+.ic-mem-danger:hover { background: var(--t-err); color: var(--t-bg); }
+
+/* S-meter bar */
+.ic-smeter-wrap {
+  flex: 1;
+  min-width: 200px;
+  height: 18px;
+  background: var(--t-bg);
+  border: 1px solid var(--t-border);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  position: relative;
+}
+.ic-smeter-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--t-ok) 0%, var(--t-warn) 60%, var(--t-err) 95%);
+  transition: width 0.15s linear;
+}
+.ic-smeter-ticks {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image: repeating-linear-gradient(to right,
+    transparent 0, transparent calc(100% / 9 - 1px),
+    var(--t-border) calc(100% / 9 - 1px), var(--t-border) calc(100% / 9));
+  opacity: 0.4;
+}
+
+/* TX meter bars (Po / ALC / SWR). Gradient anchored, revealed via clip-path. */
+.ic-txm-fill {
+  position: absolute; inset: 0;
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 0.12s linear;
+}
+.ic-txm-fill.po  { background: linear-gradient(90deg,
+    var(--t-ok) 0 55%, var(--t-warn) 80%, var(--t-err) 100%); }
+.ic-txm-fill.alc { background: linear-gradient(90deg,
+    var(--t-ok) 0 50%, var(--t-warn) 78%, var(--t-err) 100%); }
+.ic-txm-fill.swr { background: linear-gradient(90deg,
+    var(--t-ok) 0 30%, var(--t-warn) 55%, var(--t-err) 75%); }
+
+/* TX badge */
+.ic-tx-badge {
+  display: none;
+  background: var(--t-err);
+  color: var(--t-bg);
+  padding: 2px var(--s-2);
+  border-radius: var(--r-sm);
+  font-size: var(--f-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.ic-tx-badge.on { display: inline-block; }
+
+/* Cards */
+.ic-card {
+  background: var(--t-panel);
+  border: 1px solid var(--t-border);
+  border-radius: var(--r-md);
+  padding: var(--s-3);
+  margin-bottom: var(--s-3);
+}
+.ic-card-title {
+  color: var(--t-accent);
+  font-weight: 600;
+  font-size: var(--f-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: var(--s-2);
+}
+.ic-row {
+  display: flex; align-items: center; gap: var(--s-3);
+  flex-wrap: wrap; margin-bottom: var(--s-2);
+}
+.ic-row:last-child { margin-bottom: 0; }
+.ic-grid-2 {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3);
+}
+@media (max-width: 720px) { .ic-grid-2 { grid-template-columns: 1fr; } }
+
+.ic-slider { flex: 1; accent-color: var(--t-accent); }
+.ic-slider-val { min-width: 4em; text-align: right; font-variant-numeric: tabular-nums; }
+
+.ic-select, .ic-input {
+  background: var(--t-bg);
+  color: var(--t-text);
+  border: 1px solid var(--t-border);
+  border-radius: var(--r-sm);
+  padding: 2px 6px;
+  font-size: var(--f-sm);
+}
+.ic-input.w-freq { width: 9em; }
+.ic-input.w-cat  { flex: 1; font-family: var(--f-mono); }
+
+/* Offline state */
+.ic-offline {
+  background: var(--t-panel);
+  border: 1px solid var(--t-border);
+  border-radius: var(--r-md);
+  padding: var(--s-3);
+  margin-bottom: var(--s-3);
+}
+.ic-offline .head { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+.ic-offline .msg  { color: var(--t-err); font-weight: 600; }
+.ic-offline .detail { color: var(--t-warn); font-size: var(--f-sm); }
+.ic-offline .checklist { margin-top: var(--s-3); font-size: var(--f-sm); }
+.ic-offline .checklist > div { margin: var(--s-1) 0; }
+.dot { display: inline-block; width: 0.7em; }
+.dot.pending { color: var(--t-text-dim); }
+.dot.ok      { color: var(--t-ok); }
+.dot.err     { color: var(--t-err); }
+
+/* CAT console */
+#ic-cat-log {
+  background: var(--t-bg);
+  border: 1px solid var(--t-border);
+  border-radius: var(--r-sm);
+  padding: var(--s-2);
+  height: 8em;
+  overflow-y: auto;
+  font-family: var(--f-mono);
+  font-size: var(--f-xs);
+  color: var(--t-text-dim);
+  white-space: pre-wrap;
+}
+
+/* ── Tuning knobs ───────────────────────────────────────────────────────
+   Realistic VFO-style knobs. Drag the disc to spin it — a slow spin
+   tunes fine, a fast spin accelerates (see makeTuningKnob). The dial
+   is layered: a static tick ring + cyan index, the rotating knurled
+   disc, and a static specular gloss so the knob reads as a lit object. */
+.knob-wrap {
+  display: flex; flex-direction: column;
+  align-items: center; gap: var(--s-1);
+  flex: 0 0 auto; user-select: none;
+}
+.knob-dial {
+  --knob-size: 152px;
+  position: relative;
+  width: var(--knob-size); height: var(--knob-size);
+}
+.knob-wrap.sm .knob-dial { --knob-size: 76px; }
+
+.knob-base {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%,
+    var(--t-panel-hi) 0 60%, var(--t-bg) 62% 100%);
+  box-shadow: inset 0 2px 7px rgba(0,0,0,0.75),
+              0 1px 0 rgba(255,255,255,0.04);
+}
+.knob-base::before {
+  content: ''; position: absolute; inset: 3%; border-radius: 50%;
+  background: repeating-conic-gradient(from -1deg,
+    var(--t-border-hi) 0deg 1.6deg, transparent 1.6deg 9deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 78%,
+                 #000 79% 92%, transparent 93%);
+          mask: radial-gradient(circle, transparent 0 78%,
+                 #000 79% 92%, transparent 93%);
+  opacity: 0.55;
+}
+.knob-base::after {
+  content: ''; position: absolute; left: 50%; top: 1%;
+  width: 3px; height: 11%; transform: translateX(-50%);
+  background: var(--t-accent); border-radius: 2px;
+  box-shadow: 0 0 7px var(--t-accent);
+}
+
+.knob {
+  --spin: 0;
+  position: absolute; inset: 11%; border-radius: 50%;
+  cursor: grab; touch-action: none;
+  background: repeating-conic-gradient(from 0deg,
+    #3c4654 0deg 4deg, #1f252e 4deg 8deg);
+  box-shadow:
+    0 7px 15px rgba(0,0,0,0.65),
+    0 0 0 1px rgba(0,0,0,0.7),
+    0 0 calc(7px + var(--spin) * 28px)
+      rgba(79,214,230, calc(var(--spin) * 0.75));
+  transition: box-shadow 0.1s linear;
+}
+.knob:active, .knob.spinning { cursor: grabbing; }
+.knob::before {
+  content: ''; position: absolute; inset: 14%; border-radius: 50%;
+  background: radial-gradient(circle at 50% 42%,
+    #2b323d 0%, #181d25 68%, #0e1217 100%);
+  box-shadow: inset 0 -7px 13px rgba(0,0,0,0.6),
+              inset 0 2px 3px rgba(255,255,255,0.06);
+}
+.knob::after {
+  content: ''; position: absolute; left: 50%; top: 15%;
+  width: 20%; height: 20%; transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 32%,
+    #090b0e 0%, #1b212a 62%, #404b5a 100%);
+  box-shadow: inset 0 3px 7px rgba(0,0,0,0.9),
+              0 1px 0 rgba(255,255,255,0.09);
+}
+
+.knob-gloss {
+  position: absolute; inset: 11%; border-radius: 50%;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 58% 42% at 35% 26%,
+      rgba(255,255,255,0.20) 0%, rgba(255,255,255,0) 62%),
+    radial-gradient(circle at 50% 118%,
+      rgba(0,0,0,0.5) 0%, rgba(0,0,0,0) 52%);
+}
+
+.knob-cap {
+  font-size: var(--f-xs); color: var(--t-text-dim);
+  letter-spacing: 0.07em; text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+.knob-wrap.md .knob-dial { --knob-size: 96px; }
+.knob-cluster { display: flex; align-items: center; gap: var(--s-3); }
+
+/* ── Pot knobs ──────────────────────────────────────────────────────── */
+.knob-wrap.pot .knob-base::before,
+.knob-wrap.pot .knob-base::after { display: none; }
+
+.knob-arc { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
+.knob-arc::before, .knob-arc::after {
+  content: ''; position: absolute; inset: 1%; border-radius: 50%;
+  -webkit-mask: radial-gradient(circle, transparent 0 82%,
+                 #000 84% 95%, transparent 97%);
+          mask: radial-gradient(circle, transparent 0 82%,
+                 #000 84% 95%, transparent 97%);
+}
+.knob-arc::before {
+  background: conic-gradient(from 225deg,
+    var(--t-border-hi) 0deg 270deg, transparent 270deg 360deg);
+  opacity: 0.7;
+}
+.knob-arc::after {
+  background: conic-gradient(from 225deg,
+    var(--t-accent) 0deg calc(var(--val, 0) * 270deg), transparent 0deg);
+  filter: drop-shadow(0 0 3px rgba(79,214,230,0.7));
+}
+
+.knob.pot::after {
+  content: ''; position: absolute;
+  left: 50%; top: 11%;
+  width: 4px; height: 23%;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: linear-gradient(var(--t-accent), rgba(79,214,230,0.12));
+  box-shadow: 0 0 6px var(--t-accent);
+}
+
+/* Centre LED — a status lamp in the middle of a pot knob. */
+.knob-led {
+  position: absolute; left: 50%; top: 50%;
+  width: 15%; height: 15%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 38%,
+    #1a1f26 0%, #0a0d11 70%, #05070a 100%);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.9),
+              inset 0 -1px 1px rgba(255,255,255,0.04);
+  transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+.knob-led.led-green {
+  background: radial-gradient(circle at 50% 38%,
+    #d6ffe4 0%, #5dc47a 36%, #2f8049 76%, #1c5733 100%);
+  box-shadow: 0 0 6px 1px rgba(93,196,122,0.85),
+              0 0 15px 3px rgba(93,196,122,0.5),
+              inset 0 -1px 2px rgba(0,0,0,0.4),
+              inset 0 1px 2px rgba(255,255,255,0.5);
+}
+.knob-led.led-red {
+  background: radial-gradient(circle at 50% 38%,
+    #ffdbd6 0%, #e04848 36%, #962f2f 76%, #5c1c1c 100%);
+  box-shadow: 0 0 6px 1px rgba(224,72,72,0.9),
+              0 0 17px 4px rgba(224,72,72,0.55),
+              inset 0 -1px 2px rgba(0,0,0,0.4),
+              inset 0 1px 2px rgba(255,255,255,0.45);
+}
+.knob-led.led-pulse { animation: led-tx-pulse 1.1s ease-in-out infinite; }
+@keyframes led-tx-pulse {
+  0%, 100% {
+    box-shadow: 0 0 6px 1px rgba(224,72,72,0.9),
+                0 0 17px 4px rgba(224,72,72,0.55),
+                inset 0 -1px 2px rgba(0,0,0,0.4),
+                inset 0 1px 2px rgba(255,255,255,0.45);
+  }
+  50% {
+    box-shadow: 0 0 10px 2px rgba(224,72,72,1),
+                0 0 28px 9px rgba(224,72,72,0.85),
+                inset 0 -1px 2px rgba(0,0,0,0.4),
+                inset 0 1px 2px rgba(255,255,255,0.6);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .knob-led.led-pulse { animation: none; }
+}
+
+/* PTT button dimmed-out hint — even though we don't surface a software
+   interlock in v0.1, keep the class around in case the server adds one. */
+.rb.blocked { opacity: 0.45; }
+
+/* ── Footer ────────────────────────────────────────────────────────── */
+.ic-foot {
+  margin-top: var(--s-5);
+  padding: var(--s-2) var(--s-3);
+  color: var(--t-text-mute);
+  font-size: var(--f-xs);
+  letter-spacing: 0.04em;
+  text-align: center;
+  border-top: 1px solid var(--t-border);
+}
+.ic-foot a { color: var(--t-text-dim); }
+.ic-foot a:hover { color: var(--t-accent); }

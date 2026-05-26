@@ -1,0 +1,12 @@
+[Unit]
+Description=IC-7100 web control panel
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/ic7100ctl serve --device /dev/ic7100 --host 127.0.0.1 --port 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ic7100ctl"
+version = "0.1.0"
+description = "Fast, direct-CI-V web control panel for the Icom IC-7100"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Robin Pengelly" }]
+requires-python = ">=3.9"
+dependencies = ["pyserial>=3.5"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Communications :: Ham Radio",
+]
+keywords = ["ham", "radio", "icom", "ic-7100", "civ", "remote", "control"]
+
+[project.urls]
+Homepage = "https://github.com/ukbodypilot/ic7100-remote"
+Issues = "https://github.com/ukbodypilot/ic7100-remote/issues"
+
+[project.scripts]
+ic7100ctl = "ic7100ctl.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["ic7100ctl*"]
+
+[tool.setuptools.package-data]
+ic7100ctl = ["web/*.html", "web/*.css", "web/*.js"]

@@ -1,0 +1,21 @@
+# IC-7100 udev rules — creates stable /dev/ic7100 symlink for the CAT port.
+#
+# Install:
+#   sudo cp 99-ic7100.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload
+#   sudo udevadm trigger
+#
+# The IC-7100's USB cable enumerates two CDC-ACM serial endpoints.
+# ttyUSB0 is the CAT port; ttyUSB1 is rarely used (codec-bridge passthrough).
+# The exact assignment is order-of-enumeration, so we pin by interface
+# number to be deterministic.
+#
+# If you run multiple Icoms, add ATTRS{serial}=="..." to disambiguate.
+
+# Silicon Labs CP210x USB-to-serial bridge used by the IC-7100
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
+    ATTRS{interface}=="CP2102 USB to UART Bridge Controller", \
+    SYMLINK+="ic7100", GROUP="dialout", MODE="0660"
+
+# Some IC-7100s ship with a different USB bridge IC. If the rule above
+# doesn't fire on your unit, run `lsusb` and add the right VID:PID here.
