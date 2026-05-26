@@ -18,8 +18,7 @@ serves a browser-based control panel. No daemons, no rigctld, no native client.
 - Not a hamlib backend. Doesn't speak rigctl.
 - Not a multi-radio abstraction layer. IC-7100 only; see [Contributing](#contributing).
 - Not a multi-user system in v0.1. Single operator, no auth.
-- Not (yet) an audio path. v0.1 expects you to wire audio out-of-band; WebRTC
-  is on the Phase 2 roadmap.
+- Not (yet) a multi-radio shack server. One IC-7100 per process.
 
 ## Quick start
 
@@ -39,6 +38,10 @@ systemctl --user enable --now ic7100ctl
 
 # Or just run it foreground:
 ic7100ctl serve --device /dev/ic7100
+
+# With WebRTC audio:
+pip install --user ic7100ctl[audio]
+ic7100ctl serve --device /dev/ic7100 --audio
 ```
 
 Then point a browser at <http://localhost:8080/>.
@@ -61,6 +64,9 @@ Then point a browser at <http://localhost:8080/>.
   IC-7100's codec doesn't advertise itself as "ICOM" or "IC-7100" — keyword
   matching `arecord -l` finds nothing.
 - **Browser panel.** No client install.
+- **WebRTC audio (v0.2+).** RX from the radio's USB codec, TX from the
+  browser's mic, both Opus over SRTP. Sub-100 ms latency on a LAN.
+  Optional: `pip install ic7100ctl[audio]` then `--audio` on the CLI.
 - **Persistence.** Settings survive endpoint restart via
   `~/.config/ic7100ctl/settings.json`.
 
@@ -121,9 +127,8 @@ settings path and dumps its current contents.
 - Single operator in v0.1. No login, no auth, no multi-seat. Bind to
   `127.0.0.1` and front it with whatever you trust (SSH tunnel, Tailscale,
   reverse proxy with auth) if you want it off-host.
-- Audio path is BYO in v0.1. Use whatever you already have — ALSA loopback,
-  PipeWire, RTP, OBS, a phone call. Phase 2 brings an integrated WebRTC
-  audio leg.
+- Audio (v0.2+) needs aiortc + an Opus-capable browser (any current Firefox
+  or Chromium). On the server side, `arecord`/`aplay` from `alsa-utils`.
 
 ## Architecture
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ic7100ctl"
-version = "0.1.0"
+version = "0.2.0"
 description = "Fast, direct-CI-V web control panel for the Icom IC-7100"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -21,6 +21,9 @@ classifiers = [
     "Topic :: Communications :: Ham Radio",
 ]
 keywords = ["ham", "radio", "icom", "ic-7100", "civ", "remote", "control"]
+
+[project.optional-dependencies]
+audio = ["aiortc>=1.6", "av>=10"]
 
 [project.urls]
 Homepage = "https://github.com/ukbodypilot/ic7100-remote"

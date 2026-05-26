@@ -48,7 +48,29 @@ def cmd_serve(args: argparse.Namespace) -> int:
         print(f"error: HTTP server import failed: {e}", file=sys.stderr)
         return 2
 
-    server = RadioServer(radio, host=args.host, port=args.port)
+    bridge = None
+    if args.audio:
+        try:
+            from .webrtc import WebRTCBridge, AIORTC_AVAILABLE
+        except Exception as e:
+            print(f"error: --audio requested but webrtc deps missing: {e}",
+                  file=sys.stderr)
+            return 2
+        if not AIORTC_AVAILABLE:
+            print("error: aiortc not installed. "
+                  "`pip install ic7100ctl[audio]`", file=sys.stderr)
+            return 2
+        card = args.alsa_card or find_alsa_card()
+        if not card:
+            print("error: no ALSA card found for IC-7100 USB codec. "
+                  "Pass --alsa-card hw:N,0", file=sys.stderr)
+            return 2
+        print(f"audio: using ALSA card {card}", flush=True)
+        bridge = WebRTCBridge(capture_device=card, playback_device=card)
+        bridge.start()
+
+    server = RadioServer(radio, host=args.host, port=args.port,
+                         webrtc_bridge=bridge)
     server.start()
     print(f"ic7100ctl v{__version__} — http://{args.host}:{args.port}/", flush=True)
     try:
@@ -57,6 +79,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
         print("\nshutting down", flush=True)
     finally:
         server.stop()
+        if bridge is not None:
+            bridge.stop()
         transport.disconnect()
     return 0
 
@@ -120,6 +144,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="HTTP bind host (default: 127.0.0.1)")
     s.add_argument("--port", type=int, default=8080,
                    help="HTTP bind port (default: 8080)")
+    s.add_argument("--audio", action="store_true",
+                   help="Enable WebRTC audio (requires aiortc; "
+                        "install with `pip install ic7100ctl[audio]`)")
+    s.add_argument("--alsa-card", default=None,
+                   help="ALSA card for the IC-7100 USB codec "
+                        "(default: auto-detect via VID:PID 08bb:2901)")
     s.set_defaults(func=cmd_serve)
 
     # info

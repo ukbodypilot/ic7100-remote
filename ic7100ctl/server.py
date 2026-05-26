@@ -82,7 +82,8 @@ class RadioServer:
                  fast_interval: float = DEFAULT_FAST_INTERVAL,
                  settings_every: int = DEFAULT_SETTINGS_EVERY,
                  tx_meter_interval: float = DEFAULT_TX_METER_INTERVAL,
-                 web_dir: Optional[str] = None):
+                 web_dir: Optional[str] = None,
+                 webrtc_bridge=None):
         self.radio = radio
         self.host = host
         self.port = port
@@ -90,6 +91,8 @@ class RadioServer:
         self.settings_every = int(settings_every)
         self.tx_meter_interval = float(tx_meter_interval)
         self.web_dir = web_dir or _WEB_DIR
+        # Optional WebRTC bridge — provides /webrtc/offer endpoint when set.
+        self.webrtc_bridge = webrtc_bridge
 
         # In-memory state dict — what /ic7100/status returns. Refreshed by
         # the poll loop from `radio.<attr>` after each cycle.
@@ -256,7 +259,8 @@ class RadioServer:
             'connected':         connected,
             'serial_connected':  connected,
             'endpoint_name':     'ic7100',
-            'audio_rx':          False,
+            'audio_rx':          bool(self.webrtc_bridge is not None),
+            'audio_enabled':     bool(self.webrtc_bridge is not None),
             'input_active':      False,
             'rx_muted':          False,
             # Frequency / mode
@@ -881,6 +885,34 @@ def _make_handler(server: RadioServer):
                     return self._send_json(
                         {'ok': False, 'error': f'bad json: {e}'}, 400)
                 return self._send_json(server.dispatch(payload))
+
+            if path == '/webrtc/offer':
+                if server.webrtc_bridge is None:
+                    return self._send_json(
+                        {'ok': False, 'error': 'audio bridge not enabled '
+                         '(install with `pip install ic7100ctl[audio]` and '
+                         'run with --audio)'}, 503)
+                try:
+                    length = int(self.headers.get('Content-Length', '0') or '0')
+                except ValueError:
+                    length = 0
+                raw = self.rfile.read(length) if length > 0 else b''
+                try:
+                    payload = json.loads(raw.decode('utf-8')) if raw else {}
+                except (UnicodeDecodeError, json.JSONDecodeError) as e:
+                    return self._send_json(
+                        {'ok': False, 'error': f'bad json: {e}'}, 400)
+                sdp = payload.get('sdp')
+                sdp_type = payload.get('type', 'offer')
+                if not sdp:
+                    return self._send_json(
+                        {'ok': False, 'error': 'sdp required'}, 400)
+                try:
+                    answer = server.webrtc_bridge.handle_offer(sdp, sdp_type)
+                    return self._send_json(answer)
+                except Exception as e:
+                    return self._send_json(
+                        {'ok': False, 'error': f'webrtc: {e}'}, 500)
 
             return self._send_json(
                 {'ok': False, 'error': f'unknown route: {path}'}, 404)

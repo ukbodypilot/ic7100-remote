@@ -986,3 +986,119 @@ if (document.readyState === 'loading') {
 } else {
   icInit();
 }
+
+// ── WebRTC audio (Phase 2) ──────────────────────────────────────────────
+// One peer connection: server sends RX audio (radio's USB codec → Opus),
+// browser sends mic (Opus → server → aplay → radio's USB codec).
+// PTT remains the existing CI-V button — audio just keeps flowing both
+// ways; the radio modulates whatever's in its USB-codec input when
+// DATA mode is on (set automatically by the gateway PTT path).
+(function () {
+  var pc = null;
+  var micStream = null;
+  var btn = document.getElementById('ic-audio-toggle');
+  var rxEl = document.getElementById('ic-audio-rx');
+  if (!btn || !rxEl) return;
+
+  function setStatus(text) {
+    var el = document.getElementById('ic-audio-state');
+    if (el) el.textContent = text;
+  }
+
+  async function startAudio() {
+    btn.disabled = true;
+    btn.textContent = 'Connecting…';
+    try {
+      // Ask for the mic first — if the user denies, we abort.
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false,
+                 autoGainControl: false, channelCount: 1 }
+      });
+    } catch (e) {
+      setStatus('mic denied');
+      btn.textContent = 'Start audio';
+      btn.disabled = false;
+      return;
+    }
+    pc = new RTCPeerConnection({ iceServers: [] });
+    pc.addTransceiver('audio', { direction: 'sendrecv' });
+    micStream.getAudioTracks().forEach(function (t) {
+      pc.addTrack(t, micStream);
+    });
+    pc.ontrack = function (ev) {
+      // First inbound track is the radio's RX audio.
+      if (ev.streams && ev.streams[0]) {
+        rxEl.srcObject = ev.streams[0];
+      } else {
+        var ms = new MediaStream();
+        ms.addTrack(ev.track);
+        rxEl.srcObject = ms;
+      }
+      rxEl.play().catch(function(){});
+    };
+    pc.onconnectionstatechange = function () {
+      setStatus('audio: ' + pc.connectionState);
+      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        teardown();
+      }
+    };
+
+    var offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    // Wait briefly for ICE candidates to be gathered (non-trickle).
+    await new Promise(function (resolve) {
+      if (pc.iceGatheringState === 'complete') return resolve();
+      var t = setTimeout(resolve, 800);
+      pc.addEventListener('icegatheringstatechange', function () {
+        if (pc.iceGatheringState === 'complete') {
+          clearTimeout(t);
+          resolve();
+        }
+      });
+    });
+
+    var resp;
+    try {
+      resp = await fetch('/webrtc/offer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sdp: pc.localDescription.sdp,
+          type: pc.localDescription.type
+        })
+      }).then(function (r) { return r.json(); });
+    } catch (e) {
+      setStatus('audio: offer failed');
+      teardown();
+      return;
+    }
+    if (!resp || resp.ok === false || !resp.sdp) {
+      setStatus('audio: ' + (resp && resp.error || 'no answer'));
+      teardown();
+      return;
+    }
+    await pc.setRemoteDescription({ type: resp.type, sdp: resp.sdp });
+
+    btn.textContent = 'Stop audio';
+    btn.disabled = false;
+    setStatus('audio: connecting');
+  }
+
+  function teardown() {
+    if (pc) { try { pc.close(); } catch (e) {} pc = null; }
+    if (micStream) {
+      micStream.getTracks().forEach(function (t) { t.stop(); });
+      micStream = null;
+    }
+    rxEl.srcObject = null;
+    btn.textContent = 'Start audio';
+    btn.disabled = false;
+    setStatus('audio: off');
+  }
+
+  btn.addEventListener('click', function () {
+    if (pc) teardown();
+    else startAudio();
+  });
+})();
