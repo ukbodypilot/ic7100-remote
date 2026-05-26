@@ -133,7 +133,10 @@ def find_alsa_card(keywords=('IC-7100', 'ICOM', 'icom', 'IC7100')) -> Optional[s
             except (FileNotFoundError, OSError):
                 continue
             if usbid in _IC7100_AUDIO_USBIDS:
-                return f'hw:{card_dir[4:]},0'
+                # Use plughw so the ALSA plugin layer permits simultaneous
+                # capture + playback (the PCM2901 hardware is full-duplex
+                # but the raw hw: device doesn't allow two opens).
+                return f'plughw:{card_dir[4:]},0'
     except (FileNotFoundError, OSError):
         pass
     try:
@@ -144,7 +147,7 @@ def find_alsa_card(keywords=('IC-7100', 'ICOM', 'icom', 'IC7100')) -> Optional[s
                 if kw.lower() in line.lower():
                     parts = line.split()
                     if parts and parts[0] == 'card':
-                        return f'hw:{parts[1].rstrip(":")},0'
+                        return f'plughw:{parts[1].rstrip(":")},0'
     except Exception:
         pass
     return None

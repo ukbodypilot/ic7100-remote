@@ -69,19 +69,27 @@ class AlsaCapture:
 
     def _read_loop(self) -> None:
         assert self._proc is not None
+        accum = b''
         while not self._stop.is_set():
+            need = BYTES_PER_FRAME - len(accum)
             try:
-                buf = self._proc.stdout.read(BYTES_PER_FRAME)
+                chunk = self._proc.stdout.read(need)
             except (ValueError, OSError):
                 break
-            if not buf or len(buf) < BYTES_PER_FRAME:
+            if not chunk:
+                # EOF — pipe closed (arecord died).
                 break
+            accum += chunk
+            if len(accum) < BYTES_PER_FRAME:
+                continue
+            frame = accum[:BYTES_PER_FRAME]
+            accum = accum[BYTES_PER_FRAME:]
             try:
                 # Drop oldest if the consumer fell behind — better to skip
                 # than to grow the queue without bound.
                 if self._q.full():
                     self._q.get_nowait()
-                self._q.put_nowait(buf)
+                self._q.put_nowait(frame)
             except queue.Full:
                 pass
         print("[audio] capture reader exiting", flush=True)

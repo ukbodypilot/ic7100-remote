@@ -66,7 +66,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
                   "Pass --alsa-card hw:N,0", file=sys.stderr)
             return 2
         print(f"audio: using ALSA card {card}", flush=True)
-        bridge = WebRTCBridge(capture_device=card, playback_device=card)
+        bridge = WebRTCBridge(capture_device=card, playback_device=card,
+                              radio=radio)
         bridge.start()
 
     server = RadioServer(radio, host=args.host, port=args.port,

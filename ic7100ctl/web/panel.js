@@ -1008,23 +1008,28 @@ if (document.readyState === 'loading') {
   async function startAudio() {
     btn.disabled = true;
     btn.textContent = 'Connecting…';
-    try {
-      // Ask for the mic first — if the user denies, we abort.
-      micStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false,
-                 autoGainControl: false, channelCount: 1 }
-      });
-    } catch (e) {
-      setStatus('mic denied');
-      btn.textContent = 'Start audio';
-      btn.disabled = false;
-      return;
+    // Try the mic, but don't abort if denied or unavailable — RX-only is
+    // a valid mode (plain-HTTP origins block getUserMedia entirely).
+    micStream = null;
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false,
+                   autoGainControl: false, channelCount: 1 }
+        });
+      } catch (e) {
+        // RX-only fallback — keep going.
+      }
     }
     pc = new RTCPeerConnection({ iceServers: [] });
-    pc.addTransceiver('audio', { direction: 'sendrecv' });
-    micStream.getAudioTracks().forEach(function (t) {
-      pc.addTrack(t, micStream);
-    });
+    if (micStream) {
+      pc.addTransceiver('audio', { direction: 'sendrecv' });
+      micStream.getAudioTracks().forEach(function (t) {
+        pc.addTrack(t, micStream);
+      });
+    } else {
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+    }
     pc.ontrack = function (ev) {
       // First inbound track is the radio's RX audio.
       if (ev.streams && ev.streams[0]) {

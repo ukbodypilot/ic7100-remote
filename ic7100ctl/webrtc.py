@@ -45,13 +45,20 @@ from .audio import (
 
 class RxAudioTrack(MediaStreamTrack if AIORTC_AVAILABLE else object):
     """aiortc track that pulls PCM from an AlsaCapture and feeds it to the
-    Opus encoder. One per peer connection."""
+    Opus encoder. One per peer connection.
+
+    The IC-7100's USB codec streams unconditionally — there is no hardware
+    squelch gate on the audio side. We gate on `radio.squelch_open` (kept
+    fresh by the poll loop) so closed-squelch noise floor isn't pumped
+    over the air to the operator.
+    """
 
     kind = "audio"
 
-    def __init__(self, capture: AlsaCapture):
+    def __init__(self, capture: AlsaCapture, radio=None):
         super().__init__()
         self.capture = capture
+        self.radio = radio
         self._timestamp = 0
         self._time_base = fractions.Fraction(1, SAMPLE_RATE)
 
@@ -62,7 +69,12 @@ class RxAudioTrack(MediaStreamTrack if AIORTC_AVAILABLE else object):
         pcm = await loop.run_in_executor(
             None, self.capture.read_frame, 0.1)
         if pcm is None:
-            # Pump silence so the peer connection doesn't stall.
+            pcm = b'\x00' * BYTES_PER_FRAME
+        elif self.radio is not None and getattr(self.radio, 'squelch_open', True) is False:
+            # Squelch closed — drop the noise floor by replacing with
+            # silence. The peer connection stays alive (constant frame
+            # cadence) so audio resumes immediately when the squelch
+            # opens again.
             pcm = b'\x00' * BYTES_PER_FRAME
 
         # AudioFrame from raw s16 mono. PyAV expects "mono" layout.
@@ -112,11 +124,12 @@ class WebRTCBridge:
     event loop via run_coroutine_threadsafe.
     """
 
-    def __init__(self, capture_device: str, playback_device: str):
+    def __init__(self, capture_device: str, playback_device: str, radio=None):
         if not AIORTC_AVAILABLE:
             raise RuntimeError(
                 "aiortc is not installed. Install with: pip install ic7100ctl[audio]"
             )
+        self.radio = radio
         self.capture = AlsaCapture(capture_device)
         self.playback = AlsaPlayback(playback_device)
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -183,8 +196,8 @@ class WebRTCBridge:
         pc = RTCPeerConnection()
         self._pcs.add(pc)
 
-        # Server-side RX track (radio → browser).
-        rx_track = RxAudioTrack(self.capture)
+        # Server-side RX track (radio → browser). Gated on radio squelch.
+        rx_track = RxAudioTrack(self.capture, radio=self.radio)
         pc.addTrack(rx_track)
 
         # Browser-side TX: when we get a track, consume it and play
