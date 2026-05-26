@@ -49,6 +49,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         return 2
 
     server = RadioServer(radio, host=args.host, port=args.port)
+    server.start()
     print(f"ic7100ctl v{__version__} — http://{args.host}:{args.port}/", flush=True)
     try:
         server.serve_forever()
