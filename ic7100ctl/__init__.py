@@ -3,6 +3,6 @@
 from .civ import CIVTransport
 from .radio import IC7100, find_alsa_card
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = ["IC7100", "CIVTransport", "find_alsa_card", "__version__"]
