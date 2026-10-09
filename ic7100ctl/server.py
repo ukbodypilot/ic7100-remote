@@ -273,14 +273,19 @@ class RadioServer:
             'ptt_active':        bool(getattr(r, 'transmitting', False)),
             'smeter':            int(getattr(r, 'smeter', 0) or 0),
             'squelch_open':      bool(getattr(r, 'squelch_open', True)),
-            'po':                int(getattr(r, 'po', 0) or 0),
-            'swr':               int(getattr(r, 'swr', 0) or 0),
-            'alc':               int(getattr(r, 'alc', 0) or 0),
+            # TX-only meters: they aren't read while receiving, so without this
+            # the last transmit's value would sit on screen indefinitely.
+            'po':                _tx_only(r, 'po'),
+            'swr':               _tx_only(r, 'swr'),
+            'alc':               _tx_only(r, 'alc'),
             # CTCSS / DTCS
             'ctcss_tx_hz':       float(getattr(r, 'ctcss_tx_hz', 0.0) or 0.0),
             'ctcss_rx_hz':       float(getattr(r, 'ctcss_rx_hz', 0.0) or 0.0),
-            'ctcss_tx_on':       bool(getattr(r, 'ctcss_tx_on', False)),
-            'ctcss_rx_on':       bool(getattr(r, 'ctcss_rx_on', False)),
+            'tone_on':           bool(getattr(r, 'tone_on', False)),   # CI-V 16 42
+            'tsql_on':           bool(getattr(r, 'tsql_on', False)),   # CI-V 16 43
+            # Old names for the same two flags, kept for existing clients.
+            'ctcss_tx_on':       bool(getattr(r, 'tone_on', False)),
+            'ctcss_rx_on':       bool(getattr(r, 'tsql_on', False)),
             'dtcs_on':           bool(getattr(r, 'dtcs_on', False)),
             'dtcs_code':         int(getattr(r, 'dtcs_code', 23) or 23),
             'dtcs_polarity':     int(getattr(r, 'dtcs_polarity', 0) or 0),
@@ -313,7 +318,7 @@ class RadioServer:
             'tx_port':           None,
             'rx_boost_pct':      100,
             'squelch_type':      ('dtcs' if getattr(r, 'dtcs_on', False)
-                                  else ('tsql' if getattr(r, 'ctcss_rx_on', False)
+                                  else ('tsql' if getattr(r, 'tsql_on', False)
                                         else 'noise')),
             # Pack a derived settings sub-dict too — handy for clients that
             # want one blob to persist to disk.
@@ -430,6 +435,10 @@ def _cmd_filter(r, p):
         return _fail('filter: idx required')
     ok = r.set_filter(int(idx))
     return _ok({'filter': int(idx)}) if ok else _fail('set_filter NG')
+
+
+def _tx_only(r, attr: str) -> int:
+    return int(getattr(r, attr, 0) or 0) if getattr(r, 'transmitting', False) else 0
 
 
 def _cmd_ptt(r, p):
@@ -577,11 +586,14 @@ def _cmd_atten(r, p):
 
 
 def _cmd_ctcss(r, p):
-    # Combined-fields panel command — set any/all of tx_hz/rx_hz/tx_on/rx_on.
+    # Combined-fields panel command — set any/all of tx_hz (repeater tone),
+    # rx_hz (tone-squelch tone), tone_on (TONE), tsql_on (TSQL). tx_on and
+    # rx_on are accepted as the old names for tone_on / tsql_on.
     if 'hz' in p and 'tx_hz' not in p:
         p['tx_hz'] = p['hz']  # tolerate spec wording
     ok = r.set_ctcss(tx_hz=p.get('tx_hz'), rx_hz=p.get('rx_hz'),
-                     tx_on=p.get('tx_on'), rx_on=p.get('rx_on'))
+                     tone_on=p.get('tone_on', p.get('tx_on')),
+                     tsql_on=p.get('tsql_on', p.get('rx_on')))
     return _ok() if ok else _fail('set_ctcss NG')
 
 
@@ -630,15 +642,15 @@ def _cmd_raw(r, p):
 def _cmd_squelch_type(r, p):
     t = (p.get('type') or '').lower()
     if t == 'noise':
-        r.set_ctcss(rx_on=False)
+        r.set_ctcss(tsql_on=False)
         r.set_dtcs_on(False)
         return _ok({'squelch_type': 'noise'})
     if t == 'tsql':
         r.set_dtcs_on(False)
-        r.set_ctcss(rx_on=True)
+        r.set_ctcss(tsql_on=True)
         return _ok({'squelch_type': 'tsql'})
     if t == 'dtcs':
-        r.set_ctcss(rx_on=False)
+        r.set_ctcss(tsql_on=False)
         r.set_dtcs_on(True)
         return _ok({'squelch_type': 'dtcs'})
     return _fail('squelch_type: type must be noise|tsql|dtcs')

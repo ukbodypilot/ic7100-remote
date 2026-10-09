@@ -8,7 +8,8 @@ non-obvious parts that justify a dedicated library:
   0x20 like the IC-7300/7610. Earlier guesses NG'd the radio.
 * 0x0A = Memory-to-VFO, 0x0B = Memory clear. Earlier code had these swapped.
 * CALL channels are memory channels 106-109 (144-C1, 144-C2, 430-C1, 430-C2);
-  the older 0x08 0xA0 opcode actually selects Memory Bank A.
+  the older 0x08 0xA0 opcode is not a CALL selector: it selects a memory bank
+  (A-E, numbered from 1) and needs the bank number as data.
 * 0x07 0xD0/0xD1 (Main/Sub band) is for dual-receiver radios (IC-9100). The
   IC-7100 is single-receiver and has no such concept — opcodes removed.
 """
@@ -25,7 +26,7 @@ from typing import Optional
 from .civ import (
     CIVTransport, OK,
     bcd3_to_value, bcd_to_freq, bcd_to_rit_offset, bcd_to_tone,
-    freq_to_bcd, pct_to_bcd3, rit_offset_to_bcd, tone_to_bcd,
+    freq_to_bcd, pct_to_bcd3, rit_offset_to_bcd, tone_to_bcd3,
 )
 
 
@@ -201,8 +202,8 @@ class IC7100:
         # Tone-squelch state
         self.ctcss_tx_hz: float = 88.5
         self.ctcss_rx_hz: float = 88.5
-        self.ctcss_tx_on: bool = False
-        self.ctcss_rx_on: bool = False
+        self.tone_on: bool = False      # CI-V 16 42: TONE (repeater tone encode)
+        self.tsql_on: bool = False      # CI-V 16 43: TSQL (tone squelch)
         self.dtcs_on: bool = False
         self.dtcs_code: int = 23
         self.dtcs_polarity: int = 0      # 0..3 — see _DTCS_POLARITY
@@ -356,7 +357,7 @@ class IC7100:
         ok = self._set_ok(0x1c, subcmd=0x00,
                           data=bytes([0x01 if on else 0x00]))
         if ok:
-            self.transmitting = on
+            self._set_transmitting(on)
         if not on and self._we_set_data_mode:
             self.set_data_mode(False)
             if self.split and self.swap_vfo():
@@ -365,10 +366,18 @@ class IC7100:
             self._we_set_data_mode = False
         return ok
 
+    def _set_transmitting(self, on: bool) -> None:
+        """Record the TX state. Po/SWR/ALC are only read while transmitting, so
+        they keep their last value in between; wipe them whenever the state
+        flips so a new key-up never starts by showing the previous transmit."""
+        if bool(on) != self.transmitting:
+            self.po = self.swr = self.alc = 0
+        self.transmitting = bool(on)
+
     def get_ptt(self) -> Optional[bool]:
         resp = self._txn(0x1c, subcmd=0x00)
         if resp and len(resp) >= 3 and resp[0] == 0x1c and resp[1] == 0x00:
-            self.transmitting = bool(resp[2])
+            self._set_transmitting(resp[2])
             return self.transmitting
         return None
 
@@ -415,50 +424,72 @@ class IC7100:
     # -- CTCSS --
 
     def get_ctcss(self):
-        """Read full CTCSS state. Returns (tx_hz, rx_hz, tx_on, rx_on)."""
+        """Read full CTCSS state. Returns (tone_hz, tsql_hz, tone_on, tsql_on)."""
+        # The radio answers with three BCD bytes (00 hh ll = tenths of Hz),
+        # e.g. 127.3 Hz -> 1B 00 00 12 73.
         r = self._txn(0x1b, subcmd=0x00)            # TX tone freq
-        if r and len(r) >= 4 and r[0] == 0x1b and r[1] == 0x00:
-            self.ctcss_tx_hz = bcd_to_tone(r[2:4])
+        if r and len(r) >= 5 and r[0] == 0x1b and r[1] == 0x00:
+            self.ctcss_tx_hz = bcd_to_tone(r[3:5])
         r = self._txn(0x1b, subcmd=0x01)            # RX tone squelch freq
-        if r and len(r) >= 4 and r[0] == 0x1b and r[1] == 0x01:
-            self.ctcss_rx_hz = bcd_to_tone(r[2:4])
-        r = self._txn(0x16, subcmd=0x43)            # TX tone encode enable
-        if r and len(r) >= 3 and r[0] == 0x16 and r[1] == 0x43:
-            self.ctcss_tx_on = bool(r[2])
-        r = self._txn(0x16, subcmd=0x42)            # RX tone squelch enable
+        if r and len(r) >= 5 and r[0] == 0x1b and r[1] == 0x01:
+            self.ctcss_rx_hz = bcd_to_tone(r[3:5])
+        r = self._txn(0x16, subcmd=0x42)            # TONE (repeater tone) on/off
         if r and len(r) >= 3 and r[0] == 0x16 and r[1] == 0x42:
-            self.ctcss_rx_on = bool(r[2])
+            self.tone_on = bool(r[2])
+        r = self._txn(0x16, subcmd=0x43)            # TSQL (tone squelch) on/off
+        if r and len(r) >= 3 and r[0] == 0x16 and r[1] == 0x43:
+            self.tsql_on = bool(r[2])
         return (self.ctcss_tx_hz, self.ctcss_rx_hz,
-                self.ctcss_tx_on, self.ctcss_rx_on)
+                self.tone_on, self.tsql_on)
 
     def set_ctcss(self, tx_hz: Optional[float] = None,
                   rx_hz: Optional[float] = None,
+                  tone_on: Optional[bool] = None,
+                  tsql_on: Optional[bool] = None,
                   tx_on: Optional[bool] = None,
                   rx_on: Optional[bool] = None) -> bool:
+        """tx_hz = repeater tone (1B 00), rx_hz = tone-squelch tone (1B 01),
+        tone_on = TONE (16 42), tsql_on = TSQL (16 43).
+
+        tx_on / rx_on are the old names for tone_on / tsql_on, kept so
+        existing callers keep working."""
+        if tone_on is None:
+            tone_on = tx_on
+        if tsql_on is None:
+            tsql_on = rx_on
         ok = True
         if tx_hz is not None:
-            if self._set_ok(0x1b, subcmd=0x00, data=tone_to_bcd(tx_hz)):
+            if self._set_ok(0x1b, subcmd=0x00, data=tone_to_bcd3(tx_hz)):
                 self.ctcss_tx_hz = tx_hz
             else:
                 ok = False
         if rx_hz is not None:
-            if self._set_ok(0x1b, subcmd=0x01, data=tone_to_bcd(rx_hz)):
+            if self._set_ok(0x1b, subcmd=0x01, data=tone_to_bcd3(rx_hz)):
                 self.ctcss_rx_hz = rx_hz
             else:
                 ok = False
-        if tx_on is not None:
-            if self._set_ok(0x16, subcmd=0x43,
-                            data=bytes([0x01 if tx_on else 0x00])):
-                self.ctcss_tx_on = tx_on
+        if tone_on is not None:
+            if self._set_ok(0x16, subcmd=0x42,
+                            data=bytes([0x01 if tone_on else 0x00])):
+                self.tone_on = tone_on
             else:
                 ok = False
-        if rx_on is not None:
-            if self._set_ok(0x16, subcmd=0x42,
-                            data=bytes([0x01 if rx_on else 0x00])):
-                self.ctcss_rx_on = rx_on
+        if tsql_on is not None:
+            if self._set_ok(0x16, subcmd=0x43,
+                            data=bytes([0x01 if tsql_on else 0x00])):
+                self.tsql_on = tsql_on
             else:
                 ok = False
         return ok
+
+    # Old attribute names (the 16 42 / 16 43 meanings were swapped under them).
+    @property
+    def ctcss_tx_on(self) -> bool:
+        return self.tone_on
+
+    @property
+    def ctcss_rx_on(self) -> bool:
+        return self.tsql_on
 
     # -- DTCS --
 
@@ -819,8 +850,8 @@ class IC7100:
         With no argument, picks the right band-1 call channel based on the
         current frequency: <300 MHz -> 144-C1, else 430-C1.
 
-        Earlier code used 0x08 0xA0, which actually selects Memory Bank A —
-        the IC-7100's CALL channels are memory channels 106-109.
+        Earlier code used 0x08 0xA0, which selects a memory bank rather than a
+        CALL channel — the IC-7100's CALL channels are memory channels 106-109.
         """
         if not which:
             which = '144-C1' if (self.freq_hz or 0) < 300_000_000 else '430-C1'

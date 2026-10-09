@@ -146,3 +146,74 @@ class SmokeTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CtcssFrequencyTests(unittest.TestCase):
+    """The radio takes and returns CTCSS tones as 3 BCD bytes (00 hh ll)."""
+
+    def setUp(self):
+        self.t = MockCIVTransport()
+        self.r = IC7100(self.t)
+
+    def test_set_sends_three_bytes(self):
+        self.assertTrue(self.r.set_ctcss(tx_hz=127.3))
+        self.assertEqual(self.t.last_frame()[4:9], b'\x1b\x00\x00\x12\x73')
+        self.assertTrue(self.r.set_ctcss(rx_hz=88.5))
+        self.assertEqual(self.t.last_frame()[4:9], b'\x1b\x01\x00\x08\x85')
+
+    def test_get_reads_three_bytes(self):
+        self.t.set_response(0x1b, 0x00, b'\x1b\x00\x00\x12\x73')
+        self.t.set_response(0x1b, 0x01, b'\x1b\x01\x00\x08\x85')
+        self.r.get_ctcss()
+        self.assertAlmostEqual(self.r.ctcss_tx_hz, 127.3)
+        self.assertAlmostEqual(self.r.ctcss_rx_hz, 88.5)
+
+
+class ToneAndTsqlTests(unittest.TestCase):
+    """CI-V 16 42 is TONE, 16 43 is TSQL (they were wired the other way round)."""
+
+    def setUp(self):
+        self.t = MockCIVTransport()
+        self.r = IC7100(self.t)
+
+    def test_tone_on_uses_16_42(self):
+        self.assertTrue(self.r.set_ctcss(tone_on=True))
+        self.assertEqual(self.t.last_frame()[4:7], b'\x16\x42\x01')
+        self.assertTrue(self.r.tone_on and not self.r.tsql_on)
+
+    def test_tsql_on_uses_16_43(self):
+        self.assertTrue(self.r.set_ctcss(tsql_on=True))
+        self.assertEqual(self.t.last_frame()[4:7], b'\x16\x43\x01')
+        self.assertTrue(self.r.tsql_on and not self.r.tone_on)
+
+    def test_get_reads_each_flag_from_its_own_opcode(self):
+        self.t.set_response(0x16, 0x42, b'\x16\x42\x01')   # TONE on
+        self.t.set_response(0x16, 0x43, b'\x16\x43\x00')   # TSQL off
+        self.r.get_ctcss()
+        self.assertEqual((self.r.tone_on, self.r.tsql_on), (True, False))
+
+    def test_old_names_still_work(self):
+        self.r.set_ctcss(tx_on=True)                          # old name for TONE
+        self.assertEqual(self.t.last_frame()[4:6], b'\x16\x42')
+        self.r.set_ctcss(rx_on=True)                          # old name for TSQL
+        self.assertEqual(self.t.last_frame()[4:6], b'\x16\x43')
+        self.assertEqual((self.r.ctcss_tx_on, self.r.ctcss_rx_on), (True, True))
+
+
+class StaleTxMeterTests(unittest.TestCase):
+    def test_tx_meters_are_wiped_when_the_transmit_state_flips(self):
+        t = MockCIVTransport(); r = IC7100(t)
+        r.set_ptt(True)
+        r.po, r.alc, r.swr = 68, 134, 5            # readings during transmit 1
+        r.set_ptt(False)
+        self.assertEqual((r.po, r.alc, r.swr), (0, 0, 0))
+        r.po = 99                                   # stray value while receiving
+        r.set_ptt(True)                             # transmit 2 must start from zero
+        self.assertEqual(r.po, 0)
+
+    def test_get_ptt_seeing_the_end_of_a_transmit_also_wipes(self):
+        t = MockCIVTransport(); r = IC7100(t)
+        r.transmitting = True; r.po = 80
+        t.set_response(0x1c, 0x00, b'\x1c\x00\x00')   # radio says: not transmitting
+        r.get_ptt()
+        self.assertEqual((r.transmitting, r.po), (False, 0))
